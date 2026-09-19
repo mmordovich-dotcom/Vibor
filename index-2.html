@@ -1,0 +1,3164 @@
+<!doctype html>
+<html lang="ru" data-theme="cyber">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1020" />
+    <title>ARENA • Турнирная система</title>
+    <!-- MQTT.js закреплён по версии. Все стили и прикладная логика находятся в этом файле. -->
+    <script defer src="https://unpkg.com/mqtt@5.10.4/dist/mqtt.min.js"></script>
+    <script
+      defer
+      src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+    ></script>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #090f1d;
+        --panel: rgba(19, 29, 48, 0.91);
+        --field: #111d31;
+        --text: #f1f6ff;
+        --muted: #99aac4;
+        --line: #ffffff18;
+        --accent: #75f4d4;
+        --violet: #a899ff;
+        --a: #ff718b;
+        --b: #72b3ff;
+        --good: #77e4ad;
+        --radius: 22px;
+        --font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --glow: rgba(97, 221, 209, 0.13);
+        --overlay: 0.78;
+        --blur: 0px;
+      }
+      html[data-theme="arena"] {
+        --bg: #090909;
+        --panel: rgba(22, 21, 18, 0.94);
+        --field: #201e19;
+        --text: #fff8e9;
+        --muted: #b7ac95;
+        --accent: #edc56a;
+        --violet: #dbc192;
+        --a: #ed5360;
+        --b: #e7c878;
+        --radius: 6px;
+        --glow: #ba822328;
+        --font: "Arial Narrow", Impact, system-ui, sans-serif;
+      }
+      html[data-theme="retro"] {
+        --bg: #1c0931;
+        --panel: rgba(43, 16, 68, 0.9);
+        --field: #2f1649;
+        --text: #fff1fe;
+        --muted: #c5a4d8;
+        --accent: #57ffe8;
+        --violet: #ff75df;
+        --a: #ff64be;
+        --b: #57e9f2;
+        --radius: 16px;
+        --glow: #e03ad12d;
+        --font: "Trebuchet MS", system-ui, sans-serif;
+      }
+      html[data-theme="light"] {
+        color-scheme: light;
+        --bg: #edf1f7;
+        --panel: rgba(255, 255, 255, 0.95);
+        --field: #f3f5f9;
+        --text: #1a2437;
+        --muted: #5a6881;
+        --line: #142d4e20;
+        --accent: #14654f;
+        --violet: #7252bb;
+        --a: #af274b;
+        --b: #225db0;
+        --good: #166347;
+        --radius: 18px;
+        --glow: #2a738b13;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.5 var(--font);
+        min-height: 100dvh;
+      }
+      #backdrop {
+        position: fixed;
+        inset: -18px;
+        z-index: -3;
+        background: center/cover no-repeat;
+        filter: blur(var(--blur));
+        transition: filter 0.3s;
+      }
+      body:before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: -2;
+        background: linear-gradient(
+          125deg,
+          rgba(7, 12, 25, var(--overlay)),
+          rgba(9, 16, 30, var(--overlay))
+        );
+      }
+      body:after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background: radial-gradient(ellipse at 85% 5%, var(--glow), transparent 55%);
+      }
+      html[data-theme="light"] body:before {
+        background: rgba(235, 241, 249, var(--overlay));
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.42;
+        cursor: not-allowed;
+        transform: none !important;
+      }
+      button,
+      a,
+      input,
+      textarea,
+      select,
+      summary {
+        touch-action: manipulation;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 4px;
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        color: var(--text);
+        background: var(--field);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px;
+        outline: none;
+        min-width: 0;
+      }
+      input:focus,
+      select:focus,
+      textarea:focus {
+        border-color: var(--accent);
+      }
+      input[type="range"] {
+        padding: 0;
+        accent-color: var(--accent);
+        height: 30px;
+      }
+      input[type="checkbox"] {
+        width: auto;
+        accent-color: var(--accent);
+      }
+      textarea {
+        resize: vertical;
+        min-height: 142px;
+      }
+      label {
+        display: block;
+        color: var(--muted);
+        font-size: 13px;
+        margin: 12px 0 6px;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(32px, 5vw, 60px);
+        line-height: 1.08;
+        letter-spacing: -0.055em;
+      }
+      h2 {
+        font-size: 22px;
+        letter-spacing: -0.025em;
+      }
+      h3 {
+        font-size: 16px;
+      }
+      .muted,
+      small {
+        color: var(--muted);
+      }
+      small {
+        font-size: 12px;
+      }
+      a {
+        color: var(--accent);
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .wrap {
+        max-width: 1460px;
+        margin: auto;
+        padding: 28px;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding-bottom: 25px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 900;
+        letter-spacing: 0.15em;
+      }
+      .logo {
+        display: grid;
+        place-items: center;
+        width: 37px;
+        height: 37px;
+        border-radius: 11px;
+        background: var(--accent);
+        color: var(--bg);
+        font-size: 24px;
+        letter-spacing: -6px;
+        padding-right: 5px;
+      }
+      .tag {
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        border: 1px solid var(--line);
+        padding: 4px 8px;
+        border-radius: 6px;
+        color: var(--muted);
+      }
+      .status {
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      .dot.live {
+        background: var(--good);
+        box-shadow: 0 0 10px var(--good);
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 24px;
+        backdrop-filter: blur(16px);
+      }
+      .intro {
+        padding: 32px 0 35px;
+        max-width: 730px;
+      }
+      .eyebrow {
+        text-transform: uppercase;
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.19em;
+        margin-bottom: 15px;
+      }
+      .intro p {
+        margin-top: 17px;
+        max-width: 560px;
+        color: var(--muted);
+      }
+      .entry {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr 1fr;
+        gap: 18px;
+        align-items: start;
+      }
+      .entry .panel {
+        position: relative;
+        overflow: hidden;
+      }
+      .entry .panel:before {
+        content: "";
+        display: block;
+        height: 3px;
+        background: var(--accent);
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+      }
+      .entry .panel:nth-child(2):before {
+        background: var(--b);
+      }
+      .entry .panel:nth-child(3):before {
+        background: var(--violet);
+      }
+      .step {
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0.13em;
+        margin-bottom: 16px;
+      }
+      .btn {
+        border: 1px solid var(--line);
+        background: var(--field);
+        color: var(--text);
+        border-radius: 11px;
+        min-height: 44px;
+        padding: 11px 16px;
+        font-weight: 700;
+        transition:
+          transform 0.15s,
+          background 0.15s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        text-decoration: none;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        border-color: var(--accent);
+      }
+      .primary {
+        background: var(--accent);
+        color: var(--bg);
+        border-color: transparent;
+      }
+      .danger {
+        color: var(--a);
+      }
+      .full {
+        width: 100%;
+        margin-top: 16px;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .row > * {
+        min-width: 0;
+      }
+      .cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .spacer {
+        margin-top: 20px;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 12px;
+        line-height: 1.65;
+      }
+      details {
+        border-top: 1px solid var(--line);
+        margin-top: 18px;
+        padding-top: 14px;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 700;
+        padding: 4px 0;
+      }
+      .topline {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: center;
+        margin: 6px 0 24px;
+      }
+      .pin {
+        font-size: 24px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        font-variant-numeric: tabular-nums;
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 330px;
+        gap: 20px;
+      }
+      .maincol {
+        min-width: 0;
+      }
+      .side {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .stage-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+      .pill {
+        padding: 5px 10px;
+        background: var(--field);
+        border: 1px solid var(--line);
+        border-radius: 99px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .arena {
+        display: grid;
+        grid-template-columns: 1fr 44px 1fr;
+        align-items: stretch;
+        gap: 6px;
+        min-height: 280px;
+      }
+      .candidate {
+        padding: 24px 14px;
+        border: 1px solid var(--line);
+        border-radius: calc(var(--radius) - 5px);
+        background: linear-gradient(155deg, var(--glow), transparent);
+        text-align: center;
+        border-top: 3px solid var(--a);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        overflow-wrap: anywhere;
+      }
+      .candidate.b {
+        border-top-color: var(--b);
+      }
+      .candidate h2 {
+        font-size: clamp(20px, 3vw, 37px);
+      }
+      .candidate.winner {
+        box-shadow: 0 0 26px var(--glow);
+        border-color: var(--accent);
+      }
+      .score {
+        font-size: clamp(54px, 8vw, 98px);
+        font-weight: 850;
+        letter-spacing: -0.07em;
+        line-height: 1.1;
+        margin: 15px 0;
+        color: var(--a);
+        font-variant-numeric: tabular-nums;
+      }
+      .b .score {
+        color: var(--b);
+      }
+      .vs {
+        align-self: center;
+        text-align: center;
+        font-size: 13px;
+        font-weight: 900;
+        color: var(--muted);
+        font-style: italic;
+      }
+      .qualification .arena {
+        grid-template-columns: 1fr;
+      }
+      .judge-pills {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 20px;
+      }
+      .voted {
+        color: var(--good);
+        border-color: var(--good);
+      }
+      .progress {
+        height: 4px;
+        border-radius: 4px;
+        background: var(--line);
+        overflow: hidden;
+        margin-top: 20px;
+      }
+      .progress > div {
+        height: 100%;
+        background: var(--accent);
+        transition: width 0.3s;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 16px;
+      }
+      .controls .wide {
+        grid-column: 1/-1;
+      }
+      .judge-row {
+        padding: 13px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .judge-row:last-child {
+        border: 0;
+      }
+      .judge-row .row {
+        justify-content: space-between;
+      }
+      .mini {
+        font-size: 11px;
+        padding: 6px 10px;
+        min-height: 34px;
+      }
+      .bracket-wrap {
+        margin-top: 20px;
+      }
+      .bracket {
+        display: flex;
+        gap: 16px;
+        overflow-x: auto;
+        padding: 20px 2px;
+        scrollbar-width: thin;
+      }
+      .round {
+        min-width: 200px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .round > h3 {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: var(--muted);
+        letter-spacing: 0.12em;
+        margin-bottom: 4px;
+      }
+      .round-matches {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+        gap: 12px;
+      }
+      .match {
+        background: var(--field);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .match.active {
+        border-color: var(--accent);
+        box-shadow: 0 0 18px var(--glow);
+      }
+      .slot {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 10px;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        width: 100%;
+        background: none;
+        color: var(--text);
+        text-align: left;
+        font-size: 12px;
+        min-height: 42px;
+      }
+      .slot:last-child {
+        border: 0;
+      }
+      .slot span {
+        flex: 1;
+        overflow-wrap: anywhere;
+      }
+      .seed {
+        font-size: 10px;
+        color: var(--muted);
+        min-width: 14px;
+      }
+      .slot.won {
+        color: var(--accent);
+        font-weight: 800;
+      }
+      .slot:disabled {
+        opacity: 0.7;
+      }
+      .qr {
+        background: white;
+        border-radius: 12px;
+        padding: 10px;
+        width: 148px;
+        min-height: 148px;
+        margin: 14px auto;
+      }
+      .qr img,
+      .qr canvas {
+        max-width: 128px;
+        width: 128px;
+        height: 128px;
+      }
+      .qr-note {
+        text-align: center;
+      }
+      .settings {
+        margin-top: 20px;
+      }
+      .theme-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin: 16px 0;
+      }
+      .theme {
+        border: 1px solid var(--line);
+        background: var(--field);
+        border-radius: 12px;
+        padding: 10px;
+        text-align: left;
+        color: var(--text);
+        font-size: 12px;
+        min-height: 75px;
+      }
+      .theme.active {
+        border-color: var(--accent);
+      }
+      .swatch {
+        height: 16px;
+        border-radius: 4px;
+        margin-bottom: 8px;
+      }
+      .judging {
+        max-width: 850px;
+        margin: auto;
+      }
+      .judge-form {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 20px;
+      }
+      .criteria {
+        padding: 16px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .criteria .row {
+        justify-content: space-between;
+      }
+      .criteria output {
+        font-weight: 800;
+        color: var(--accent);
+        font-size: 20px;
+      }
+      .numeric {
+        max-width: 80px;
+      }
+      .winner-pick {
+        font-size: 22px;
+        min-height: 155px;
+        width: 100%;
+        overflow-wrap: anywhere;
+        white-space: normal;
+        border-top: 3px solid var(--a);
+      }
+      .winner-pick.b {
+        border-top-color: var(--b);
+      }
+      .winner-pick.active {
+        background: var(--glow);
+        border: 2px solid var(--accent);
+      }
+      .vote-message {
+        padding: 18px;
+        border: 1px solid var(--good);
+        color: var(--good);
+        border-radius: 12px;
+        margin: 20px 0;
+      }
+      .result-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 11px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .podium {
+        padding: 36px 15px;
+        text-align: center;
+      }
+      .podium h1 {
+        color: var(--accent);
+        margin: 18px 0;
+        overflow-wrap: anywhere;
+      }
+      .footer {
+        font-size: 11px;
+        color: var(--muted);
+        padding: 28px 0 5px;
+        display: flex;
+        justify-content: space-between;
+        gap: 15px;
+        flex-wrap: wrap;
+      }
+      #toasts {
+        position: fixed;
+        bottom: 22px;
+        right: 22px;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-width: min(410px, calc(100vw - 32px));
+        pointer-events: none;
+      }
+      .toast {
+        background: var(--field);
+        border: 1px solid var(--accent);
+        color: var(--text);
+        border-radius: 12px;
+        padding: 15px 20px;
+        box-shadow: 0 10px 40px #0004;
+        animation: enter 0.2s ease;
+      }
+      .toast.error {
+        border-color: var(--a);
+      }
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      dialog {
+        background: var(--panel);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 25px;
+        width: min(480px, calc(100vw - 28px));
+        box-shadow: 0 30px 100px #0008;
+      }
+      dialog::backdrop {
+        background: #0009;
+        backdrop-filter: blur(5px);
+      }
+      dialog p {
+        margin: 12px 0;
+        color: var(--muted);
+      }
+      dialog .row {
+        justify-content: flex-end;
+        margin-top: 20px;
+      }
+      .projector .side,
+      .projector .settings,
+      .projector #exit,
+      .projector #export,
+      .projector #control-panel {
+        display: none;
+      }
+      .projector .workspace {
+        grid-template-columns: 1fr;
+      }
+      .projector .arena {
+        min-height: 43vh;
+      }
+      .projector .wrap {
+        max-width: 1800px;
+      }
+      .admin .workspace {
+        grid-template-columns: minmax(0, 1fr) 350px;
+      }
+      .admin .arena {
+        min-height: 200px;
+      }
+      .admin .score {
+        font-size: 60px;
+      }
+      .busy {
+        opacity: 0.6;
+        pointer-events: none;
+      }
+      .offline-banner {
+        padding: 12px 16px;
+        border: 1px solid var(--a);
+        border-radius: 12px;
+        color: var(--a);
+        margin-bottom: 18px;
+      }
+      .settings-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+      .check {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .waiting {
+        padding: 50px;
+        text-align: center;
+        color: var(--muted);
+      }
+      @media (min-width: 1500px) {
+        .arena {
+          min-height: 350px;
+        }
+      }
+      @media (max-width: 1050px) {
+        .entry {
+          grid-template-columns: 1fr 1fr;
+        }
+        .entry > .panel:first-child {
+          grid-column: 1/-1;
+        }
+        .workspace,
+        .admin .workspace {
+          grid-template-columns: minmax(0, 1fr) 290px;
+        }
+        .panel {
+          padding: 19px;
+        }
+        .theme-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      @media (max-width: 760px) {
+        .wrap {
+          padding: 18px 14px;
+        }
+        .bar {
+          padding-bottom: 14px;
+        }
+        .tag {
+          display: none;
+        }
+        .intro {
+          padding-top: 25px;
+        }
+        .entry,
+        .workspace,
+        .admin .workspace,
+        .settings-grid {
+          grid-template-columns: 1fr;
+        }
+        .entry > .panel:first-child {
+          grid-column: auto;
+        }
+        .side {
+          display: grid;
+          grid-template-columns: 1fr;
+        }
+        .topline {
+          align-items: flex-start;
+        }
+        .pin {
+          font-size: 20px;
+        }
+        .arena {
+          min-height: 235px;
+          grid-template-columns: 1fr 25px 1fr;
+        }
+        .candidate {
+          padding: 20px 8px;
+        }
+        .candidate h2 {
+          font-size: 21px;
+        }
+        .score {
+          font-size: 60px;
+        }
+        .judge-form {
+          grid-template-columns: 1fr;
+        }
+        .winner-pick {
+          min-height: 110px;
+        }
+        .panel {
+          padding: 18px;
+        }
+        .cols {
+          gap: 10px;
+        }
+        .intro h1 {
+          font-size: 42px;
+        }
+        .theme-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .footer {
+          font-size: 10px;
+        }
+        .topline h2 {
+          font-size: 20px;
+        }
+        .projector .arena {
+          min-height: 40vh;
+        }
+        .admin .side {
+          order: -1;
+        }
+        .admin #invite-panel {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *:before,
+        *:after {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="backdrop" aria-hidden="true"></div>
+    <div class="wrap">
+      <header class="bar">
+        <div class="brand">
+          <span class="logo" aria-hidden="true">ΛΛ</span> ARENA
+          <span class="tag">TOURNAMENT CONTROL / 2.0</span>
+        </div>
+        <div class="row">
+          <span id="connection" class="status" role="status"
+            ><i class="dot"></i><span>Готов к старту</span></span
+          ><button id="exit" class="btn mini" hidden>Выйти</button>
+        </div>
+      </header>
+      <main>
+        <section id="landing">
+          <div class="intro">
+            <div class="eyebrow">Один турнир. Полный контроль.</div>
+            <h1>
+              Сцена ваша.<br /><span style="color: var(--accent)">Всё остальное — ARENA.</span>
+            </h1>
+            <p>
+              От квалификации до финального решения. Экран турнира, независимые судейские пульты и
+              управление с телефона.
+            </p>
+          </div>
+          <div class="entry">
+            <form id="host-form" class="panel">
+              <div class="step">01 / ГЛАВНЫЙ ЭКРАН</div>
+              <h2>Создать турнир</h2>
+              <p class="hint">Этот экран остаётся открытым весь турнир.</p>
+              <label for="title-input">Название турнира</label
+              ><input id="title-input" maxlength="80" value="Турнир ARENA" required />
+              <div class="cols">
+                <div>
+                  <label for="size-input">Размер сетки</label
+                  ><select id="size-input">
+                    <option value="8">TOP 8</option>
+                    <option value="16" selected>TOP 16</option>
+                    <option value="32">TOP 32</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="count-input">Без списка: участников</label
+                  ><input id="count-input" type="number" min="2" max="128" value="16" />
+                </div>
+              </div>
+              <label for="participants-input">Участники — каждый с новой строки</label
+              ><textarea
+                id="participants-input"
+                placeholder="Алексей | 28&#10;Максим | 25&#10;Даниил | 24"
+              ></textarea
+              ><small
+                >Необязательные баллы для посева: Имя | 28. Пустое поле — создадим номера.</small
+              >
+              <div class="cols">
+                <div>
+                  <label for="order-input">Порядок</label
+                  ><select id="order-input">
+                    <option value="seed">Посев по баллам</option>
+                    <option value="shuffle">Случайный порядок</option>
+                    <option value="list">Как в списке</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="start-input">Начать с</label
+                  ><select id="start-input">
+                    <option value="qualify">Квалификации</option>
+                    <option value="battle">Баттлов</option>
+                  </select>
+                </div>
+              </div>
+              <label for="master-input">Мастер-пароль администратора</label
+              ><input
+                id="master-input"
+                type="password"
+                minlength="8"
+                maxlength="128"
+                autocomplete="new-password"
+                placeholder="Минимум 8 символов"
+                required
+              />
+              <button class="btn primary full" type="submit">
+                Создать комнату <span aria-hidden="true">↗</span></button
+              ><button id="resume" class="btn full" type="button" hidden>
+                Продолжить сохранённый турнир
+              </button>
+            </form>
+            <form id="judge-login" class="panel">
+              <div class="step">02 / СУДЕЙСКИЙ ПУЛЬТ</div>
+              <h2>Войти как Судья</h2>
+              <p class="hint">Оценки отправляются на главный экран и скрыты до раскрытия.</p>
+              <label for="judge-pin">ПИН комнаты</label
+              ><input
+                id="judge-pin"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
+                maxlength="6"
+                placeholder="000000"
+                required
+              /><label for="judge-name">Имя судьи</label
+              ><input
+                id="judge-name"
+                maxlength="40"
+                autocomplete="name"
+                placeholder="Ваше имя"
+                required
+              /><button class="btn full" type="submit">Подключиться к судейству</button>
+              <p class="hint">
+                Один судья — один активный пульт. При потере сети голос можно безопасно повторить.
+              </p>
+            </form>
+            <form id="admin-login" class="panel">
+              <div class="step">03 / ПУЛЬТ РЕЖИССЁРА</div>
+              <h2>Войти как Администратор</h2>
+              <p class="hint">Баттлы, состав судей и оформление — с любого устройства.</p>
+              <label for="admin-pin">ПИН комнаты</label
+              ><input
+                id="admin-pin"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
+                maxlength="6"
+                placeholder="000000"
+                required
+              /><label for="admin-password">Мастер-пароль</label
+              ><input
+                id="admin-password"
+                type="password"
+                maxlength="128"
+                autocomplete="current-password"
+                required
+              /><button class="btn full" type="submit">Открыть пульт управления</button>
+            </form>
+          </div>
+          <details class="panel spacer">
+            <summary>Подключение и краткая инструкция</summary>
+            <div class="settings-grid">
+              <div>
+                <label for="broker-input">MQTT-брокер (WebSocket Secure)</label
+                ><input id="broker-input" value="wss://broker.emqx.io:8084/mqtt" />
+                <div class="cols">
+                  <div>
+                    <label for="broker-user">Логин брокера, если нужен</label
+                    ><input id="broker-user" autocomplete="username" />
+                  </div>
+                  <div>
+                    <label for="broker-password">Пароль брокера</label
+                    ><input id="broker-password" type="password" autocomplete="current-password" />
+                  </div>
+                </div>
+                <label for="public-url">Публичный HTTPS-адрес этого файла (для QR)</label
+                ><input id="public-url" type="url" placeholder="https://example.com/index.html" />
+              </div>
+              <div class="hint">
+                <p>
+                  1. Разместите файл на HTTPS-хостинге. Откройте его на главном экране и создайте
+                  комнату.
+                </p>
+                <p>
+                  2. Выберите тип судейства в настройках. Судьи открывают тот же адрес по QR и
+                  вводят имя. Администратору передайте ПИН и мастер-пароль.
+                </p>
+                <p>
+                  3. После голосования раскройте оценки и перейдите к следующему баттлу. При ничьей
+                  назначьте новый раунд.
+                </p>
+                <p>
+                  Для работы нужны интернет, доступ к CDN и брокеру. Файл также работает через
+                  localhost или file:// в браузере с Web Crypto. QR для file:// требует публичный
+                  адрес.
+                </p>
+                <p>
+                  Публичный EMQX подходит для пробного турнира. Для мероприятия используйте
+                  собственный MQTT-брокер с учётными записями и ACL: ПИН не заменяет серверное
+                  разграничение доступа. Имена и раскрытые результаты передаются в общий топик
+                  комнаты.
+                </p>
+              </div>
+            </div>
+          </details>
+        </section>
+        <section id="dashboard" hidden>
+          <div class="topline">
+            <div>
+              <div id="role-label" class="eyebrow">ГЛАВНЫЙ ЭКРАН</div>
+              <h2 id="tournament-title"></h2>
+            </div>
+            <div>
+              <small>ПИН КОМНАТЫ</small>
+              <div id="room-pin" class="pin"></div>
+            </div>
+          </div>
+          <div id="stale" class="offline-banner" hidden>
+            Хост не отвечает. Действия приостановлены; дождитесь восстановления связи.
+          </div>
+          <div class="workspace">
+            <div class="maincol">
+              <section id="stage" class="panel"></section>
+              <section id="bracket-panel" class="panel bracket-wrap">
+                <div class="row" style="justify-content: space-between">
+                  <h3>Турнирная сетка</h3>
+                  <span class="muted" style="font-size: 11px"
+                    >Нажмите имя, чтобы переименовать</span
+                  >
+                </div>
+                <div id="bracket" class="bracket"></div>
+              </section>
+              <section id="leaderboard-panel" class="panel spacer" hidden>
+                <h3>Рейтинг квалификации</h3>
+                <div id="leaderboard"></div>
+              </section>
+            </div>
+            <aside class="side">
+              <section id="control-panel" class="panel">
+                <div class="eyebrow">РЕЖИССЁР ТУРНИРА</div>
+                <h3>Управление баттлом</h3>
+                <div id="controls" class="controls"></div>
+              </section>
+              <section class="panel">
+                <div class="row" style="justify-content: space-between">
+                  <h3>Судьи</h3>
+                  <span id="judge-count" class="pill">0 онлайн</span>
+                </div>
+                <div id="judges"></div>
+              </section>
+              <section id="invite-panel" class="panel">
+                <h3>Пригласить судей</h3>
+                <div id="qr" class="qr"></div>
+                <div id="qr-note" class="hint qr-note"></div>
+                <button id="copy-link" class="btn full mini">Копировать ссылку</button
+                ><button id="projector" class="btn full mini">Режим проектора</button
+                ><button id="export" class="btn full mini">Скачать результаты JSON</button>
+              </section>
+            </aside>
+          </div>
+          <details id="settings" class="panel settings">
+            <summary>Настройки турнира и оформление</summary>
+            <div class="settings-grid">
+              <div>
+                <h3 class="spacer">Визуальная тема</h3>
+                <div id="themes" class="theme-grid"></div>
+                <h3 class="spacer">Фон турнира</h3>
+                <label for="background-file">Загрузить фото с устройства</label
+                ><input id="background-file" type="file" accept="image/*" /><small id="image-info"
+                  >Автосжатие: до 1280 × 720, WebP/JPEG, до 100 КБ base64.</small
+                ><label for="background-url">Или прямая ссылка на изображение</label
+                ><input id="background-url" type="url" placeholder="https://…/photo.jpg" />
+                <div class="row spacer">
+                  <button id="set-url" class="btn mini">Применить URL</button
+                  ><button id="remove-background" class="btn mini">Убрать фон</button>
+                </div>
+                <label for="opacity"
+                  >Затемнение / плотность оверлея <output id="opacity-out">78%</output></label
+                ><input id="opacity" type="range" min="15" max="95" value="78" /><label for="blur"
+                  >Размытие фона <output id="blur-out">0 px</output></label
+                ><input id="blur" type="range" min="0" max="24" value="0" />
+              </div>
+              <form id="scoring-form">
+                <h3 class="spacer">Система оценивания</h3>
+                <label for="scoring-mode">Тип судейства</label
+                ><select id="scoring-mode">
+                  <option value="criteria">По критериям</option>
+                  <option value="points">Балльная шкала</option>
+                  <option value="winner">1 клик — выбор победителя</option></select
+                ><label for="score-range">Диапазон баллов</label
+                ><select id="score-range">
+                  <option value="5">1–5</option>
+                  <option value="10">1–10</option>
+                  <option value="100">1–100</option></select
+                ><label for="criteria-input">Критерии через запятую (до 8)</label
+                ><input
+                  id="criteria-input"
+                  maxlength="400"
+                  value="Техника / Навык, Артистизм / Стиль, Впечатление"
+                /><label class="check"
+                  ><input id="auto-reveal" type="checkbox" checked />Автораскрытие до
+                  полуфинала</label
+                ><label class="check"
+                  ><input id="judge-reveal" type="checkbox" checked />Разрешить судье раскрыть после
+                  всех голосов</label
+                >
+                <p class="hint">
+                  В полуфинале, матче за бронзу и финале раскрытие всегда ручное. В квалификации
+                  используется сумма трёх оценок 1–10, как в исходной версии. Новый режим баттлов
+                  применяется со сбросом текущих голосов.
+                </p>
+                <button class="btn full" type="submit">Применить правила</button>
+              </form>
+            </div>
+          </details>
+        </section>
+        <section id="judge-screen" class="judging" hidden>
+          <div id="judge-heading"></div>
+          <div id="judge-content"></div>
+        </section>
+      </main>
+      <footer class="footer">
+        <span>ARENA / Система турнирного судейства</span
+        ><span id="footer-info">Квалификация → Сетка → Бронза → Финал</span>
+      </footer>
+    </div>
+    <div id="toasts" role="status" aria-live="polite"></div>
+    <dialog id="modal">
+      <form method="dialog" id="modal-form">
+        <h2 id="modal-title"></h2>
+        <p id="modal-text"></p>
+        <label id="modal-label" for="modal-input">Имя участника</label
+        ><input id="modal-input" maxlength="60" />
+        <div class="row">
+          <button class="btn" value="cancel">Отмена</button
+          ><button class="btn primary" id="modal-ok" value="ok">Подтвердить</button>
+        </div>
+      </form>
+    </dialog>
+    <script>
+      "use strict";
+      /* ARENA v2. Архитектура: один хост — единственный автор состояния.
+   Клиенты присылают намерения; хост проверяет роль, session, roundId и requestId.
+   MQTT: arena/v2/{PIN}/state, appearance (retained); request, reply/{session} (без retain).
+   Приватные голоса и пароль идут в гибридном RSA-OAEP + AES-GCM конверте.
+   Это не заменяет ACL брокера: начальное получение ключа не аутентифицировано.
+   Сохранение: приватный снимок только у хоста; общая публикация без скрытых оценок.
+   Документация транспорта: https://github.com/mqttjs/MQTT.js
+   Брокер: https://www.emqx.com/en/mqtt/public-mqtt5-broker
+*/
+      const $ = (id) => document.getElementById(id),
+        enc = new TextEncoder(),
+        dec = new TextDecoder();
+      const THEMES = {
+        cyber: ["Cyberpunk Dark", "#17253b,#75f4d4,#a899ff"],
+        arena: ["Arena / Boxing", "#161616,#edc56a,#ac3442"],
+        retro: ["Synthwave 80s", "#3a1558,#ff75df,#57ffe8"],
+        light: ["Minimal Light", "#f8fafc,#dbe6f4,#14654f"],
+      };
+      const DEFAULT_STYLE = { theme: "cyber", background: "", opacity: 78, blur: 0 };
+      const DEFAULT_RULES = {
+        mode: "criteria",
+        max: 5,
+        criteria: ["Техника / Навык", "Артистизм / Стиль", "Впечатление"],
+        autoReveal: true,
+        judgeReveal: true,
+      };
+      const KEY = "arena.v2.host",
+        ONLINE = 25000,
+        IMAGE_LIMIT = 100 * 1024,
+        PACKET_LIMIT = 150 * 1024;
+      const esc = (s) =>
+        String(s ?? "").replace(
+          /[&<>"']/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+        );
+      const uid = () => crypto.randomUUID();
+      const normalize = (s) =>
+        String(s).trim().replace(/\s+/g, " ").normalize("NFKC").toLocaleLowerCase("ru");
+      const sum = (a) => a.reduce((x, y) => x + y, 0);
+      const clone = (x) => JSON.parse(JSON.stringify(x));
+      function read(key, fallback = null) {
+        try {
+          return JSON.parse(localStorage.getItem(key)) ?? fallback;
+        } catch {
+          return fallback;
+        }
+      }
+      let storageWarning = false;
+      function save(key, value) {
+        try {
+          localStorage.setItem(key, JSON.stringify(value));
+          return true;
+        } catch {
+          if (!storageWarning) {
+            toast(
+              "Память браузера недоступна или заполнена. Сохранение после перезагрузки не гарантируется.",
+              true,
+            );
+            storageWarning = true;
+          }
+          return false;
+        }
+      }
+      function toast(message, error = false) {
+        const el = document.createElement("div");
+        el.className = "toast" + (error ? " error" : "");
+        el.textContent = message;
+        $("toasts").append(el);
+        setTimeout(() => el.remove(), 6000);
+      }
+      function check(ok, message) {
+        if (!ok) throw Error(message);
+      }
+      function status(text, live = false) {
+        $("connection").innerHTML =
+          `<i class="dot ${live ? "live" : ""}"></i><span>${esc(text)}</span>`;
+      }
+      function modal(title, text, value = null) {
+        return new Promise((resolve) => {
+          const d = $("modal");
+          $("modal-title").textContent = title;
+          $("modal-text").textContent = text;
+          $("modal-input").hidden = $("modal-label").hidden = value === null;
+          $("modal-input").value = value ?? "";
+          d.returnValue = "";
+          d.onclose = () =>
+            resolve(
+              d.returnValue === "ok"
+                ? value === null
+                  ? true
+                  : $("modal-input").value.trim()
+                : null,
+            );
+          d.showModal();
+          if (value !== null) $("modal-input").focus();
+        });
+      }
+      let role = "",
+        room = "",
+        client = null,
+        host = null,
+        state = null,
+        style = read("arena.v2.style", DEFAULT_STYLE),
+        rsaPrivate = null;
+      let publicKey = null,
+        publicKeyText = "",
+        replyKey = null,
+        replyRaw = "",
+        session = uid(),
+        device = read("arena.v2.device") || uid();
+      save("arena.v2.device", device);
+      // sessionStorage переживает перезагрузку, но не объединяет независимые вкладки.
+      try {
+        session = sessionStorage.getItem("arena.v2.session") || session;
+        sessionStorage.setItem("arena.v2.session", session);
+      } catch {}
+      let credentials = {},
+        auth = null,
+        joinedEpoch = "",
+        joining = false,
+        networkReady = false,
+        lastHost = 0,
+        lastRev = -1,
+        heartbeat = null,
+        releaseHostLock = null;
+      let inbox = Promise.resolve(),
+        pending = new Map(),
+        judgeDraft = null,
+        judgeFormKey = "",
+        inviteURL = "",
+        settingsKey = "",
+        appearanceVersion = -1;
+      let deferredAppearance = null;
+      let brokerConfig = {},
+        hostClaiming = false,
+        hostCollision = false,
+        hostLeaseTimer = null;
+      const topic = (s) => `arena/v2/${room}/${s}`;
+      const currentMatch = (s) =>
+        s?.phase === "battle" ? s.matches.find((m) => m.id === s.current) : null;
+      const player = (s, id) => s?.players.find((p) => p.id === id);
+      const name = (s, id) => player(s, id)?.name || "Свободный слот";
+      const live = (j) => !j.blocked && Date.now() - j.lastSeen < ONLINE;
+      const currentRound = (s) =>
+        s.phase === "qualify"
+          ? `Квалификация · ${Math.min(s.qIndex + 1, s.players.length)} / ${s.players.length}`
+          : currentMatch(s)?.label || "Турнир завершён";
+      function protocolAvailable() {
+        check(
+          crypto?.subtle,
+          "Нужен браузер с Web Crypto. Откройте файл через HTTPS или localhost.",
+        );
+        check(
+          window.mqtt,
+          "Библиотека MQTT не загрузилась. Проверьте интернет и доступ к unpkg.com.",
+        );
+      }
+      function to64(buf) {
+        let s = "";
+        for (const v of new Uint8Array(buf)) s += String.fromCharCode(v);
+        return btoa(s);
+      }
+      function from64(s) {
+        return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+      }
+      async function aesImport(raw) {
+        return crypto.subtle.importKey("raw", from64(raw), "AES-GCM", false, [
+          "encrypt",
+          "decrypt",
+        ]);
+      }
+      async function seal(key, data) {
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        return {
+          iv: to64(iv),
+          body: to64(
+            await crypto.subtle.encrypt(
+              { name: "AES-GCM", iv },
+              key,
+              enc.encode(JSON.stringify(data)),
+            ),
+          ),
+        };
+      }
+      async function unseal(key, data) {
+        return JSON.parse(
+          dec.decode(
+            await crypto.subtle.decrypt(
+              { name: "AES-GCM", iv: from64(data.iv) },
+              key,
+              from64(data.body),
+            ),
+          ),
+        );
+      }
+      async function derive(password, salt) {
+        const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, [
+          "deriveBits",
+        ]);
+        return to64(
+          await crypto.subtle.deriveBits(
+            { name: "PBKDF2", salt: enc.encode(salt), iterations: 120000, hash: "SHA-256" },
+            key,
+            256,
+          ),
+        );
+      }
+      async function loadHostKey() {
+        rsaPrivate = await crypto.subtle.importKey(
+          "jwk",
+          host.privateKey,
+          { name: "RSA-OAEP", hash: "SHA-256" },
+          false,
+          ["decrypt"],
+        );
+      }
+      async function wrapRequest(data) {
+        if (publicKeyText !== JSON.stringify(state.publicKey)) {
+          publicKeyText = JSON.stringify(state.publicKey);
+          publicKey = await crypto.subtle.importKey(
+            "jwk",
+            state.publicKey,
+            { name: "RSA-OAEP", hash: "SHA-256" },
+            false,
+            ["encrypt"],
+          );
+        }
+        const raw = crypto.getRandomValues(new Uint8Array(32));
+        const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt"]);
+        return {
+          ...(await seal(key, data)),
+          key: to64(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, raw)),
+        };
+      }
+      async function unwrapRequest(data) {
+        const raw = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, rsaPrivate, from64(data.key));
+        const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"]);
+        return unseal(key, data);
+      }
+      function persist() {
+        if (host) save(KEY, host);
+      }
+      function publish(path, data, retain = false) {
+        check(client?.connected, "Нет связи с брокером. Попробуйте после подключения.");
+        const body = JSON.stringify(data);
+        check(
+          enc.encode(body).length <= PACKET_LIMIT,
+          "Сообщение превышает 150 КБ. Уменьшите изображение или список.",
+        );
+        return new Promise((resolve, reject) =>
+          client.publish(topic(path), body, { qos: 1, retain }, (err) =>
+            err ? reject(err) : resolve(),
+          ),
+        );
+      }
+      /* Сетка хранит явные зависимости. null означает Bye, pending — ещё не определённого победителя.
+   Автопроход возможен только после завершения обоих исходных матчей. */
+      function seedOrder(size) {
+        let order = [1, 2];
+        while (order.length < size) {
+          const n = order.length * 2 + 1;
+          order = order.flatMap((x) => [x, n - x]);
+        }
+        return order;
+      }
+      function shuffle(items) {
+        const a = [...items];
+        for (let i = a.length - 1; i > 0; i--) {
+          const r = crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296,
+            j = Math.floor(r * (i + 1));
+          [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+      }
+      function bracketBuild(s, ids) {
+        s.phase = "battle";
+        s.matches = [];
+        s.current = null;
+        let previous = [],
+          levels = Math.log2(s.size);
+        for (let r = 0; r < levels; r++) {
+          const round = [];
+          for (let i = 0; i < s.size / 2 ** (r + 1); i++) {
+            const remaining = levels - r,
+              label =
+                remaining === 1
+                  ? "Гранд-финал"
+                  : remaining === 2
+                    ? "Полуфинал"
+                    : remaining === 3
+                      ? "Четвертьфинал"
+                      : `1/${2 ** (remaining - 1)} финала`;
+            let slots =
+              r === 0
+                ? seedOrder(s.size)
+                    .slice(i * 2, i * 2 + 2)
+                    .map((n) => ids[n - 1] || null)
+                : [null, null];
+            const m = {
+              id: `r${r}m${i}`,
+              r,
+              i,
+              label,
+              slots,
+              sources: r ? [previous[i * 2], previous[i * 2 + 1]] : [],
+              kind: "main",
+              done: false,
+              winner: null,
+              loser: null,
+              reason: "",
+              result: null,
+            };
+            s.matches.push(m);
+            round.push(m.id);
+          }
+          previous = round;
+        }
+        const semis = s.matches.filter((m) => m.r === levels - 2);
+        s.matches.push({
+          id: "bronze",
+          r: levels - 1,
+          i: 1,
+          label: "Матч за третье место",
+          slots: [null, null],
+          sources: semis.map((m) => m.id),
+          kind: "bronze",
+          done: false,
+          winner: null,
+          loser: null,
+          reason: "",
+          result: null,
+        });
+        advance(s);
+      }
+      function matchReady(s, m) {
+        if (!m.sources.length) return true;
+        const sources = m.sources.map((id) => s.matches.find((x) => x.id === id));
+        if (!sources.every((x) => x.done)) return false;
+        m.slots = sources.map((x) => (m.kind === "bronze" ? x.loser : x.winner));
+        return true;
+      }
+      function matchFinish(m, winner, reason, result = null) {
+        m.done = true;
+        m.winner = winner;
+        m.loser = m.slots.find((id) => id && id !== winner) || null;
+        m.reason = reason;
+        m.result = result;
+      }
+      function roundReset(s) {
+        s.roundId = uid();
+        s.votes = {};
+        s.revealed = false;
+        s.technical = null;
+        s.expected = Object.values(s.judges)
+          .filter((j) => !j.blocked)
+          .map((j) => j.id);
+        s.attempt = (s.attempt || 0) + 1;
+      }
+      function advance(s) {
+        const ordered = [
+          ...s.matches.filter((m) => m.kind === "main" && m.r < Math.log2(s.size) - 1),
+          s.matches.find((m) => m.kind === "bronze"),
+          s.matches.find((m) => m.kind === "main" && m.r === Math.log2(s.size) - 1),
+        ];
+        for (const m of ordered) {
+          if (m.done) continue;
+          if (!matchReady(s, m)) continue;
+          const present = m.slots.filter(Boolean);
+          if (present.length < 2) {
+            matchFinish(m, present[0] || null, "bye");
+            continue;
+          }
+          s.current = m.id;
+          roundReset(s);
+          return;
+        }
+        s.phase = "finished";
+        s.current = null;
+        roundReset(s);
+      }
+      function effectiveRules(s) {
+        return s.phase === "qualify"
+          ? {
+              mode: "criteria",
+              max: 10,
+              criteria: ["Техника / Навык", "Артистизм / Стиль", "Впечатление"],
+            }
+          : s.rules;
+      }
+      function totals(s) {
+        let a = 0,
+          b = 0,
+          tie = 0;
+        for (const v of Object.values(s.votes)) {
+          if (s.phase === "battle" && s.rules.mode === "winner") {
+            if (v.choice === "a") a++;
+            else if (v.choice === "b") b++;
+            else tie++;
+          } else {
+            a += sum(v.a);
+            b += sum(v.b || []);
+          }
+        }
+        return { a, b, tie };
+      }
+      function allVoted(s) {
+        return s.expected.length > 0 && s.expected.every((id) => s.votes[id]);
+      }
+      function resultWinner(s) {
+        if (s.technical) return s.technical;
+        const t = totals(s);
+        if (s.rules.mode === "winner" && t.tie >= Math.max(t.a, t.b)) return null;
+        return t.a === t.b ? null : t.a > t.b ? "a" : "b";
+      }
+      function autoReveal(s) {
+        const m = currentMatch(s);
+        if (
+          s.phase === "battle" &&
+          m.r < Math.log2(s.size) - 2 &&
+          s.rules.autoReveal &&
+          allVoted(s)
+        )
+          s.revealed = true;
+      }
+      function snapshot() {
+        const s = host;
+        return {
+          v: 2,
+          room: s.room,
+          epoch: s.epoch,
+          hostId: s.hostId,
+          rev: s.rev,
+          at: Date.now(),
+          publicKey: s.publicKey,
+          title: s.title,
+          size: s.size,
+          phase: s.phase,
+          players: s.players,
+          matches: s.matches,
+          current: s.current,
+          qIndex: s.qIndex,
+          qualifiers: s.qualifiers,
+          rules: s.rules,
+          roundId: s.roundId,
+          attempt: s.attempt,
+          expected: s.expected,
+          revealed: s.revealed,
+          technical: s.technical,
+          judges: Object.values(s.judges).map((j) => ({
+            id: j.id,
+            name: j.name,
+            lastSeen: j.lastSeen,
+            blocked: j.blocked,
+            voteVersion: j.voteVersion || 0,
+            voted: !!s.votes[j.id],
+          })),
+          results: s.revealed ? totals(s) : null,
+          breakdown: s.revealed
+            ? Object.entries(s.votes).map(([id, v]) => ({
+                judge: s.judges[id]?.name || "Судья",
+                ...v,
+              }))
+            : [],
+        };
+      }
+      function sync(persistData = true) {
+        host.rev++;
+        state = snapshot();
+        lastHost = Date.now();
+        lastRev = state.rev;
+        if (persistData) persist();
+        render();
+        if (networkReady) publish("state", state, true).catch((e) => toast(e.message, true));
+      }
+      function syncStyle() {
+        style = { ...host.style };
+        applyStyle();
+        renderSettings();
+        persist();
+        if (networkReady)
+          publish("appearance", { epoch: host.epoch, rev: host.styleRev, style }, true).catch((e) =>
+            toast(e.message, true),
+          );
+      }
+      /* Проверки команд находятся на хосте, а не только в интерфейсе. */
+      function dispatch(s, action, args, roundId) {
+        const roundActions = [
+          "next",
+          "reveal",
+          "reset",
+          "technical",
+          "replace",
+          "resetJudge",
+          "kick",
+          "rules",
+          "finishQualify",
+        ];
+        if (roundActions.includes(action))
+          check(
+            roundId === s.roundId,
+            "Раунд уже изменился. Повторите действие на актуальном экране.",
+          );
+        switch (action) {
+          case "reveal":
+            check(s.phase !== "finished", "Турнир завершён.");
+            check(
+              allVoted(s),
+              "Не все назначенные судьи проголосовали. Отсутствующего судью можно исключить.",
+            );
+            s.revealed = true;
+            break;
+          case "reset":
+            check(s.phase !== "finished", "Турнир завершён.");
+            roundReset(s);
+            break;
+          case "technical": {
+            check(
+              s.phase === "battle" && ["a", "b"].includes(args.side),
+              "Техническая победа доступна в баттле.",
+            );
+            s.technical = args.side;
+            s.revealed = true;
+            break;
+          }
+          case "next": {
+            check(s.phase !== "finished", "Турнир уже завершён.");
+            check(s.revealed, "Сначала раскройте оценки.");
+            if (s.phase === "qualify") {
+              check(allVoted(s), "Не все судьи проголосовали.");
+              const id = s.players[s.qIndex]?.id;
+              check(id, "Все участники уже оценены.");
+              s.qualifiers.push({ id, score: totals(s).a, order: s.qIndex });
+              s.qIndex++;
+              if (s.qIndex >= s.players.length) finishQualify(s);
+              else roundReset(s);
+            } else {
+              const w = resultWinner(s);
+              check(w, "Ничья / Extra Round. Назначьте переголосование.");
+              const m = currentMatch(s);
+              matchFinish(
+                m,
+                m.slots[w === "a" ? 0 : 1],
+                s.technical ? "technical" : "score",
+                totals(s),
+              );
+              advance(s);
+            }
+            break;
+          }
+          case "finishQualify":
+            check(s.phase === "qualify", "Квалификация уже завершена.");
+            finishQualify(s);
+            break;
+          case "replace": {
+            check(s.phase === "battle", "Замена доступна в текущем баттле.");
+            check(["a", "b"].includes(args.side), "Неизвестная сторона.");
+            const n = validName(args.name);
+            const m = currentMatch(s),
+              p = {
+                id: uid(),
+                name: n,
+                seed: player(s, m.slots[args.side === "a" ? 0 : 1])?.seed || 0,
+                score: 0,
+              };
+            check(s.players.length < 160, "Достигнут лимит замен.");
+            s.players.push(p);
+            m.slots[args.side === "a" ? 0 : 1] = p.id;
+            /* Закрепляем замену: источники уже разрешены и больше не пересчитываются. */ m.sources =
+              [];
+            roundReset(s);
+            break;
+          }
+          case "rename": {
+            const p = player(s, args.id);
+            check(p, "Участник не найден.");
+            p.name = validName(args.name);
+            break;
+          }
+          case "resetJudge": {
+            check(!s.revealed, "Оценки раскрыты. Используйте переголосование раунда.");
+            const j = s.judges[args.id];
+            check(j && !j.blocked, "Судья не найден.");
+            delete s.votes[j.id];
+            j.voteVersion = (j.voteVersion || 0) + 1;
+            break;
+          }
+          case "kick": {
+            const j = s.judges[args.id];
+            check(j, "Судья не найден.");
+            check(!s.revealed, "Сначала сбросьте раунд: раскрытый результат зафиксирован.");
+            j.blocked = true;
+            j.token = "";
+            delete s.votes[j.id];
+            s.expected = s.expected.filter((id) => id !== j.id);
+            autoReveal(s);
+            break;
+          }
+          case "unblock": {
+            const j = s.judges[args.id];
+            check(j, "Судья не найден.");
+            j.blocked = false;
+            j.lastSeen = 0;
+            j.session = "";
+            break;
+          }
+          case "rules": {
+            check(["winner", "points", "criteria"].includes(args.mode), "Неизвестный режим.");
+            check([5, 10, 100].includes(args.max), "Неизвестная шкала.");
+            check(
+              Array.isArray(args.criteria) &&
+                args.criteria.length >= 1 &&
+                args.criteria.length <= 8,
+              "Укажите от 1 до 8 критериев.",
+            );
+            const criteria = args.criteria.map((x) => validName(x, 40));
+            check(
+              new Set(criteria.map(normalize)).size === criteria.length,
+              "Критерии не должны повторяться.",
+            );
+            s.rules = {
+              mode: args.mode,
+              max: args.max,
+              criteria,
+              autoReveal: !!args.autoReveal,
+              judgeReveal: !!args.judgeReveal,
+            };
+            if (s.phase === "battle") roundReset(s);
+            break;
+          }
+          case "appearance": {
+            const patch = args;
+            check(patch && typeof patch === "object", "Некорректное оформление.");
+            if ("theme" in patch) {
+              check(THEMES[patch.theme], "Неизвестная тема.");
+              s.style.theme = patch.theme;
+            }
+            if ("background" in patch) {
+              check(
+                validBackground(patch.background),
+                "Некорректный фон или слишком большой файл.",
+              );
+              s.style.background = patch.background;
+            }
+            if ("opacity" in patch) {
+              check(
+                Number.isFinite(patch.opacity) && patch.opacity >= 15 && patch.opacity <= 95,
+                "Некорректная прозрачность.",
+              );
+              s.style.opacity = patch.opacity;
+            }
+            if ("blur" in patch) {
+              check(
+                Number.isFinite(patch.blur) && patch.blur >= 0 && patch.blur <= 24,
+                "Некорректное размытие.",
+              );
+              s.style.blur = patch.blur;
+            }
+            s.styleRev++;
+            break;
+          }
+          default:
+            throw Error("Неизвестная команда.");
+        }
+      }
+      function validName(value, max = 60) {
+        check(typeof value === "string", "Имя должно быть текстом.");
+        const n = value.trim().replace(/\s+/g, " ");
+        check(n.length > 0 && n.length <= max, `Имя: от 1 до ${max} символов.`);
+        return n;
+      }
+      function finishQualify(s) {
+        check(s.qualifiers.length >= 2, "Нужно завершить оценивание минимум двух участников.");
+        const ids = [...s.qualifiers]
+          .sort((a, b) => b.score - a.score || a.order - b.order)
+          .slice(0, s.size)
+          .map((q, i) => {
+            const p = player(s, q.id);
+            p.seed = i + 1;
+            p.score = q.score;
+            return p.id;
+          });
+        bracketBuild(s, ids);
+      }
+      function validateVote(s, v) {
+        const r = effectiveRules(s);
+        if (r.mode === "winner") {
+          check(v && ["a", "b", "tie"].includes(v.choice), "Выберите победителя или ничью.");
+          return { choice: v.choice };
+        }
+        const n = r.mode === "points" ? 1 : r.criteria.length;
+        for (const side of s.phase === "qualify" ? ["a"] : ["a", "b"])
+          check(
+            Array.isArray(v?.[side]) &&
+              v[side].length === n &&
+              v[side].every((x) => Number.isInteger(x) && x >= 1 && x <= r.max),
+            "Оценки вне допустимого диапазона.",
+          );
+        return { a: [...v.a], b: s.phase === "qualify" ? [] : [...v.b] };
+      }
+      /* Доставка: QoS 1 допускает повтор пакета. Хост запоминает ответы и не применяет
+   повторную команду. Каждый запрос имеет TTL и уникальный идентификатор. */
+      async function respond(req, response) {
+        const key = await aesImport(req.replyKey);
+        await publish(
+          `reply/${req.session}`,
+          await seal(key, { id: req.id, epoch: host.epoch, ...response }),
+        );
+      }
+      async function handleRequest(packet) {
+        let req;
+        try {
+          req = await unwrapRequest(packet);
+          check(
+            req && typeof req.id === "string" && /^[\w-]{10,80}$/.test(req.id),
+            "Некорректный ID.",
+          );
+          check(
+            /^[\w-]{10,80}$/.test(req.session) &&
+              typeof req.replyKey === "string" &&
+              req.replyKey.length < 100,
+            "Некорректная сессия.",
+          );
+          check(req.epoch === host.epoch, "Комната перезапущена. Войдите снова.");
+          check(
+            Number.isFinite(req.at) && Math.abs(Date.now() - req.at) < 60000,
+            "Запрос устарел. Проверьте часы устройства и повторите.",
+          );
+          const seen = host.seen.find((x) => x.id === req.id);
+          if (seen) {
+            check(seen.session === req.session, "Повтор ID другой сессии.");
+            return respond(req, seen.response);
+          }
+          let response = { ok: true, message: "Готово" };
+          if (req.type === "join") {
+            check(["judge", "admin"].includes(req.role), "Неизвестная роль.");
+            if (req.role === "admin") {
+              const old = host.admins[req.session];
+              if (!(old && req.token && old.token === req.token)) {
+                check(
+                  typeof req.password === "string" && req.password.length <= 128,
+                  "Введите пароль.",
+                );
+                check(
+                  (await derive(req.password, host.salt)) === host.passwordHash,
+                  "Неверный мастер-пароль.",
+                );
+              }
+              const token = old?.token || uid();
+              host.admins[req.session] = { token, lastSeen: Date.now() };
+              response.auth = { role: "admin", token };
+            } else {
+              const n = validName(req.name, 40),
+                id = "j:" + normalize(n);
+              let j = host.judges[id];
+              check(!j?.blocked, "Судья исключён. Попросите администратора разрешить вход.");
+              if (j && !j.token) {
+                j.device = req.device;
+                j.token = uid();
+                req.token = j.token;
+                j.session = "";
+                j.lastSeen = 0;
+              }
+              if (j) {
+                check(
+                  j.device === req.device && j.token === req.token,
+                  "Это имя уже зарегистрировано. Используйте исходный браузер или попросите администратора исключить и разрешить вход заново.",
+                );
+                check(
+                  !live(j) || j.session === req.session,
+                  "Этот судья уже подключён в другой вкладке.",
+                );
+              } else {
+                check(Object.keys(host.judges).length < 32, "Максимум 32 судьи в комнате.");
+                j = { id, name: n, device: req.device, token: uid(), blocked: false };
+                host.judges[id] = j;
+              }
+              j.session = req.session;
+              j.lastSeen = Date.now();
+              if (!host.revealed && !host.expected.includes(id)) host.expected.push(id);
+              response.auth = { role: "judge", id, token: j.token };
+            }
+          } else {
+            const admin = host.admins[req.session];
+            const judge = Object.values(host.judges).find(
+              (j) => !j.blocked && j.session === req.session && j.token === req.token,
+            );
+            const isAdmin = !!(admin && admin.token === req.token);
+            check(isAdmin || judge, "Сессия недействительна. Войдите в комнату снова.");
+            if (isAdmin) admin.lastSeen = Date.now();
+            if (judge) judge.lastSeen = Date.now();
+            if (req.type === "ping") {
+              response.message = "online";
+            } else if (req.type === "vote") {
+              check(judge, "Голосовать может только судья.");
+              check(host.phase !== "finished" && !host.revealed, "Приём голосов завершён.");
+              check(req.roundId === host.roundId, "Это голос за прошлый раунд.");
+              check(
+                host.expected.includes(judge.id),
+                "Вы присоединились после закрытия состава раунда.",
+              );
+              check(
+                req.voteVersion === (judge.voteVersion || 0),
+                "Этот голос был сброшен. Заполните форму заново.",
+              );
+              check(
+                !host.votes[judge.id],
+                "Голос уже принят. Для исправления попросите администратора сбросить его.",
+              );
+              host.votes[judge.id] = validateVote(host, req.vote);
+              autoReveal(host);
+              response.message = "Голос принят";
+            } else if (req.type === "command") {
+              check(
+                isAdmin ||
+                  (judge &&
+                    req.action === "reveal" &&
+                    host.rules.judgeReveal &&
+                    host.votes[judge.id]),
+                "Недостаточно прав.",
+              );
+              dispatch(host, req.action, req.args || {}, req.roundId);
+              response.message =
+                req.action === "appearance" ? "Оформление обновлено" : "Команда выполнена";
+            } else throw Error("Неизвестный тип запроса.");
+          }
+          host.seen.push({ id: req.id, session: req.session, response });
+          host.seen = host.seen.slice(-160);
+          if (req.type !== "ping") sync();
+          else sync(false);
+          if (req.type === "command" && req.action === "appearance") syncStyle();
+          await respond(req, response);
+        } catch (error) {
+          if (req?.replyKey && /^[\w-]{10,80}$/.test(req.session || ""))
+            await respond(req, { ok: false, message: error.message }).catch(() => {});
+        }
+      }
+      async function request(type, extra = {}) {
+        check(
+          client?.connected && state && Date.now() - lastHost < ONLINE,
+          "Нет актуальной связи с хостом.",
+        );
+        const req = {
+          id: uid(),
+          type,
+          epoch: state.epoch,
+          session,
+          device,
+          replyKey: replyRaw,
+          at: Date.now(),
+          token: auth?.token,
+          roundId: state.roundId,
+          ...extra,
+        };
+        const packet = await wrapRequest(req);
+        return new Promise((resolve, reject) => {
+          const item = { resolve, reject, timer: null };
+          item.timer = setTimeout(() => {
+            pending.delete(req.id);
+            reject(Error("Хост не подтвердил действие. Проверьте состояние и повторите."));
+          }, 14000);
+          pending.set(req.id, item);
+          publish("request", packet).catch((err) => {
+            clearTimeout(item.timer);
+            pending.delete(req.id);
+            reject(err);
+          });
+        });
+      }
+      async function joinRoom() {
+        if (joining || !state || Date.now() - lastHost >= ONLINE) return;
+        joining = true;
+        try {
+          const remembered = read(
+            `arena.v2.auth.${room}.${role}.${normalize(credentials.name || "admin")}`,
+          );
+          const response = await request("join", {
+            role,
+            name: credentials.name,
+            password: credentials.password,
+            token: auth?.token || remembered?.token,
+          });
+          auth = response.auth;
+          joinedEpoch = state.epoch;
+          save(`arena.v2.auth.${room}.${role}.${normalize(credentials.name || "admin")}`, auth);
+          credentials.password = "";
+          $("admin-password").value = "";
+          toast(role === "admin" ? "Пульт администратора подключён" : "Вы подключены к судейству");
+          render();
+        } catch (e) {
+          toast(e.message, true);
+          stopClient();
+          showLanding();
+        } finally {
+          joining = false;
+        }
+      }
+      async function receive(path, payload) {
+        if (payload.length > 220000) return;
+        let data;
+        try {
+          data = JSON.parse(payload.toString());
+        } catch {
+          return;
+        }
+        if (role === "host") {
+          if (path === topic("state") && data?.epoch) {
+            if (data.hostId !== host.hostId && Date.now() - data.at < ONLINE) {
+              hostCollision = true;
+              if (!hostClaiming) {
+                stopClient();
+                showLanding();
+                toast("Этот ПИН занят другим хостом. Создайте новую комнату.", true);
+              }
+            }
+          }
+          if (path === topic("request") && networkReady) await handleRequest(data);
+          return;
+        }
+        if (path === topic(`reply/${session}`)) {
+          try {
+            const response = await unseal(replyKey, data),
+              p = pending.get(response.id);
+            if (p) {
+              pending.delete(response.id);
+              clearTimeout(p.timer);
+              response.ok ? p.resolve(response) : p.reject(Error(response.message));
+            }
+          } catch {}
+          return;
+        }
+        if (path === topic("appearance")) {
+          if (!state) {
+            deferredAppearance = data;
+            return;
+          }
+          if (data.epoch === state?.epoch && data.rev >= appearanceVersion) {
+            appearanceVersion = data.rev;
+            style = validateStyle(data.style);
+            applyStyle();
+            renderSettings();
+          }
+          return;
+        }
+        if (
+          path !== topic("state") ||
+          data?.v !== 2 ||
+          data.room !== room ||
+          !Array.isArray(data.judges) ||
+          !Array.isArray(data.players)
+        )
+          return;
+        if (state && state.epoch !== data.epoch) {
+          toast("Хост создал новую комнату. Войдите заново.", true);
+          stopClient();
+          showLanding();
+          return;
+        }
+        if (data.rev < lastRev) return;
+        lastRev = data.rev;
+        state = data;
+        lastHost = data.at;
+        networkReady = true;
+        if (deferredAppearance) {
+          const saved = deferredAppearance;
+          deferredAppearance = null;
+          if (saved.epoch === state.epoch) {
+            appearanceVersion = saved.rev;
+            style = validateStyle(saved.style);
+            applyStyle();
+          }
+        }
+        if (!joinedEpoch && !joining) joinRoom();
+        if (auth?.role === "judge" && state.judges.find((j) => j.id === auth.id)?.blocked) {
+          toast("Администратор отключил ваш пульт.", true);
+          stopClient();
+          showLanding();
+          return;
+        }
+        render();
+      }
+      function networkConfig() {
+        const url = $("broker-input").value.trim();
+        check(/^wss:\/\//i.test(url), "Укажите адрес брокера wss://…");
+        return {
+          url,
+          username: $("broker-user").value.trim(),
+          password: $("broker-password").value,
+        };
+      }
+      function stopClient() {
+        networkReady = false;
+        clearInterval(heartbeat);
+        clearTimeout(hostLeaseTimer);
+        if (client) {
+          client.end(true);
+          client = null;
+        }
+        for (const p of pending.values()) {
+          clearTimeout(p.timer);
+          p.reject(Error("Подключение закрыто."));
+        }
+        pending.clear();
+        if (releaseHostLock) {
+          releaseHostLock();
+          releaseHostLock = null;
+        }
+        status("Отключено");
+      }
+      async function connect() {
+        protocolAvailable();
+        status("Подключение к MQTT…");
+        const raw = crypto.getRandomValues(new Uint8Array(32));
+        replyRaw = to64(raw);
+        replyKey = await aesImport(replyRaw);
+        client = mqtt.connect(brokerConfig.url, {
+          clientId: `arena_${role}_${device.slice(0, 8)}_${session.slice(0, 8)}`,
+          clean: true,
+          keepalive: 15,
+          reconnectPeriod: 2000,
+          connectTimeout: 15000,
+          resubscribe: false,
+          queueQoSZero: false,
+          username: brokerConfig.username || undefined,
+          password: brokerConfig.password || undefined,
+        });
+        client.on("message", (path, payload) => {
+          inbox = inbox
+            .then(() => receive(path, payload))
+            .catch((e) => console.warn("Пакет отклонён:", e.message));
+        });
+        client.on("connect", () => {
+          status("MQTT подключён", true);
+          client.subscribe(
+            [
+              topic("state"),
+              ...(role === "host"
+                ? [topic("request")]
+                : [topic("appearance"), topic(`reply/${session}`)]),
+            ],
+            { qos: 1 },
+            (err) => {
+              if (err) {
+                toast("Не удалось подписаться на комнату.", true);
+                return;
+              }
+              if (role === "host") {
+                hostClaiming = true;
+                hostCollision = false;
+                clearTimeout(hostLeaseTimer);
+                hostLeaseTimer = setTimeout(() => {
+                  hostClaiming = false;
+                  if (hostCollision) {
+                    stopClient();
+                    showLanding();
+                    toast("ПИН уже занят активным турниром. Создайте комнату заново.", true);
+                    return;
+                  }
+                  networkReady = true;
+                  sync();
+                  syncStyle();
+                }, 900);
+              } else {
+                networkReady = true;
+                if (state && auth)
+                  request("ping").catch(() => {
+                    joinedEpoch = "";
+                    joinRoom();
+                  });
+              }
+            },
+          );
+        });
+        for (const event of ["offline", "close", "reconnect"])
+          client.on(event, () => {
+            networkReady = false;
+            status("Связь потеряна · переподключение");
+            renderConnectivity();
+          });
+        client.on("error", () => status("Ошибка MQTT · проверьте адрес и доступ"));
+        heartbeat = setInterval(() => {
+          if (role === "host") {
+            if (networkReady) sync(false);
+          } else {
+            renderConnectivity();
+            if (client?.connected && auth && Date.now() - lastHost < ONLINE)
+              request("ping").catch(() => {});
+            else if (!auth && state && !joining) joinRoom();
+          }
+        }, 7000);
+      }
+      async function acquireHostLock() {
+        if (!navigator.locks) return;
+        await new Promise((resolve, reject) => {
+          navigator.locks
+            .request("arena-host-" + room, { ifAvailable: true }, (lock) => {
+              if (!lock) {
+                reject(Error("Этот турнир уже открыт хостом в другой вкладке."));
+                return;
+              }
+              return new Promise((done) => {
+                releaseHostLock = done;
+                resolve();
+              });
+            })
+            .catch(reject);
+        });
+      }
+      function showLanding() {
+        role = "";
+        auth = null;
+        joinedEpoch = "";
+        joining = false;
+        state = null;
+        host = null;
+        lastRev = -1;
+        appearanceVersion = -1;
+        judgeFormKey = "";
+        settingsKey = "";
+        document.body.className = "";
+        $("landing").hidden = false;
+        $("dashboard").hidden = true;
+        $("judge-screen").hidden = true;
+        $("exit").hidden = true;
+        $("resume").hidden = !read(KEY);
+      }
+      function showApp() {
+        document.body.className = role === "admin" ? "admin" : "";
+        $("landing").hidden = true;
+        $("exit").hidden = false;
+        $("dashboard").hidden = role === "judge";
+        $("judge-screen").hidden = role !== "judge";
+        if (role === "judge")
+          $("judge-content").innerHTML = '<div class="panel waiting">Подключаемся к хосту…</div>';
+        else $("stage").innerHTML = '<div class="waiting">Подключаемся к комнате…</div>';
+      }
+      function parsePlayers() {
+        const lines = $("participants-input")
+          .value.split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        check(lines.length <= 128, "Максимум 128 участников в квалификации.");
+        const count = Number($("count-input").value);
+        if (!lines.length)
+          check(
+            Number.isInteger(count) && count >= 2 && count <= 128,
+            "Укажите от 2 до 128 участников.",
+          );
+        const players = (
+          lines.length ? lines : Array.from({ length: count }, (_, i) => `Участник ${i + 1}`)
+        ).map((line, i) => {
+          const split = line.lastIndexOf("|"),
+            n = split >= 0 ? line.slice(0, split) : line,
+            score =
+              split >= 0
+                ? Number(
+                    line
+                      .slice(split + 1)
+                      .trim()
+                      .replace(",", "."),
+                  )
+                : 0;
+          check(
+            Number.isFinite(score) && score >= 0 && score <= 100000,
+            "Баллы посева должны быть числом от 0 до 100000.",
+          );
+          return { id: uid(), name: validName(n), score, seed: i + 1 };
+        });
+        check(players.length >= 2, "Добавьте минимум двух участников.");
+        return players;
+      }
+      async function startHost(resume = false) {
+        protocolAvailable();
+        brokerConfig = networkConfig();
+        if (resume) {
+          host = read(KEY);
+          check(host?.v === 2, "Нет сохранённого турнира.");
+          host.judges = host.judges || {};
+          for (const j of Object.values(host.judges)) j.lastSeen = 0;
+          host.admins = host.admins || {};
+          host.seen = [];
+          room = host.room;
+        } else {
+          const players = parsePlayers(),
+            size = Number($("size-input").value),
+            phase = $("start-input").value,
+            order = $("order-input").value;
+          check(
+            phase === "qualify" || players.length <= size,
+            "Для прямого старта участников не должно быть больше размера сетки.",
+          );
+          const password = $("master-input").value;
+          check(password.length >= 8, "Мастер-пароль должен содержать минимум 8 символов.");
+          if (
+            read(KEY) &&
+            !(await modal(
+              "Новый турнир",
+              "Сохранённый турнир в этом браузере будет заменён. Продолжить?",
+            ))
+          )
+            return;
+          const pair = await crypto.subtle.generateKey(
+            {
+              name: "RSA-OAEP",
+              modulusLength: 2048,
+              publicExponent: new Uint8Array([1, 0, 1]),
+              hash: "SHA-256",
+            },
+            true,
+            ["encrypt", "decrypt"],
+          );
+          room = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
+          const salt = uid();
+          host = {
+            v: 2,
+            room,
+            epoch: uid(),
+            hostId: uid(),
+            rev: 0,
+            title: validName($("title-input").value, 80),
+            size,
+            phase,
+            players,
+            matches: [],
+            current: null,
+            qIndex: 0,
+            qualifiers: [],
+            judges: {},
+            admins: {},
+            seen: [],
+            rules: clone(DEFAULT_RULES),
+            style: { ...style },
+            styleRev: 1,
+            salt,
+            passwordHash: await derive(password, salt),
+            publicKey: await crypto.subtle.exportKey("jwk", pair.publicKey),
+            privateKey: await crypto.subtle.exportKey("jwk", pair.privateKey),
+          };
+          if (phase === "battle") {
+            const ordered =
+              order === "shuffle"
+                ? shuffle(players)
+                : order === "seed"
+                  ? [...players].sort((a, b) => b.score - a.score)
+                  : players;
+            ordered.forEach((p, i) => (p.seed = i + 1));
+            bracketBuild(
+              host,
+              ordered.map((p) => p.id),
+            );
+          } else {
+            if (order === "shuffle") host.players = shuffle(players);
+            roundReset(host);
+          }
+          $("master-input").value = "";
+        }
+        role = "host";
+        await acquireHostLock();
+        await loadHostKey();
+        persist();
+        style = host.style;
+        applyStyle();
+        showApp();
+        sync();
+        await connect();
+      }
+      async function startRemote(which) {
+        protocolAvailable();
+        brokerConfig = networkConfig();
+        room = $(which + "-pin").value.trim();
+        check(/^\d{6}$/.test(room), "ПИН должен содержать ровно 6 цифр.");
+        role = which;
+        credentials =
+          which === "judge"
+            ? { name: validName($("judge-name").value, 40) }
+            : { password: $("admin-password").value };
+        auth = null;
+        state = null;
+        lastRev = -1;
+        lastHost = 0;
+        appearanceVersion = -1;
+        joinedEpoch = "";
+        showApp();
+        await connect();
+        setTimeout(() => {
+          if (role === which && !auth)
+            toast(
+              "Комната пока не найдена. Проверьте ПИН, адрес брокера и открытый экран хоста.",
+              true,
+            );
+        }, 15000);
+      }
+      async function command(action, args = {}, expectedRound = state?.roundId) {
+        if (role === "host") {
+          check(networkReady, "Дождитесь подключения хоста к брокеру.");
+          dispatch(host, action, args, expectedRound);
+          sync();
+          if (action === "appearance") syncStyle();
+          return;
+        }
+        check(auth, "Дождитесь входа в комнату.");
+        await request("command", { action, args, roundId: expectedRound });
+      }
+      /* Оформление передаётся отдельно от состояния матча: большой фон не пересылается
+   при каждом голосе. Размер контролируется после кодирования, а не у исходного фото. */
+      function validBackground(value) {
+        if (typeof value !== "string") return false;
+        if (!value) return true;
+        if (/^data:image\/(webp|jpeg);base64,[A-Za-z0-9+/=]+$/.test(value))
+          return enc.encode(value).length <= IMAGE_LIMIT;
+        try {
+          const u = new URL(value);
+          return u.protocol === "https:" && value.length <= 2048;
+        } catch {
+          return false;
+        }
+      }
+      function validateStyle(s) {
+        return {
+          theme: THEMES[s?.theme] ? s.theme : "cyber",
+          background: validBackground(s?.background) ? s.background : "",
+          opacity: Math.max(15, Math.min(95, Number(s?.opacity) || 78)),
+          blur: Math.max(0, Math.min(24, Number(s?.blur) || 0)),
+        };
+      }
+      function applyStyle() {
+        style = validateStyle(style);
+        document.documentElement.dataset.theme = style.theme;
+        document.documentElement.style.setProperty("--overlay", style.opacity / 100);
+        document.documentElement.style.setProperty("--blur", style.blur + "px");
+        $("backdrop").style.backgroundImage = style.background
+          ? `url(${JSON.stringify(style.background)})`
+          : "";
+        save("arena.v2.style", style);
+      }
+      async function compressImage(file) {
+        check(file && file.type.startsWith("image/"), "Выберите изображение.");
+        check(file.size <= 40 * 1024 * 1024, "Исходное фото должно быть меньше 40 МБ.");
+        const url = URL.createObjectURL(file),
+          img = new Image();
+        try {
+          img.src = url;
+          await img.decode();
+          check(img.width && img.height, "Не удалось прочитать фото.");
+          let scale = Math.min(1, 1280 / img.width, 720 / img.height),
+            w = Math.max(1, Math.round(img.width * scale)),
+            h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement("canvas"),
+            ctx = canvas.getContext("2d");
+          for (let pass = 0; pass < 14; pass++) {
+            canvas.width = w;
+            canvas.height = h;
+            ctx.fillStyle = "#101827";
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            let data = canvas.toDataURL("image/webp", 0.65);
+            if (!data.startsWith("data:image/webp")) data = canvas.toDataURL("image/jpeg", 0.65);
+            if (enc.encode(data).length <= IMAGE_LIMIT)
+              return { data, w, h, kb: Math.ceil(enc.encode(data).length / 1024) };
+            w = Math.max(1, Math.floor(w * 0.83));
+            h = Math.max(1, Math.floor(h * 0.83));
+          }
+          throw Error("Не удалось сжать фото до 100 КБ. Выберите другое.");
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+      function btn(action, text, extra = "", disabled = false, cls = "") {
+        return `<button class="btn ${cls}" data-action="${action}" ${extra} ${disabled ? "disabled" : ""}>${text}</button>`;
+      }
+      function renderConnectivity() {
+        const available =
+          role === "host" ? networkReady : networkReady && Date.now() - lastHost < ONLINE;
+        if (role && role !== "judge") $("stale").hidden = available;
+        document
+          .querySelectorAll("[data-needs-network]")
+          .forEach((el) => (el.disabled = !available));
+        if (role !== "host" && role && state) {
+          status(
+            available ? (auth ? "В комнате · " + room : "Вход в комнату…") : "Ожидание хоста",
+            available,
+          );
+        }
+        return available;
+      }
+      function render() {
+        if (!state) return;
+        if (role !== "host" && !auth) return;
+        renderConnectivity();
+        if (role === "judge") {
+          renderJudge();
+          return;
+        }
+        $("tournament-title").textContent = state.title;
+        $("room-pin").textContent = room;
+        $("role-label").textContent =
+          role === "admin" ? "ПУЛЬТ АДМИНИСТРАТОРА" : "ГЛАВНЫЙ ЭКРАН / LIVE";
+        renderStage();
+        renderControls();
+        renderJudges();
+        renderBracket();
+        renderSettings();
+        renderInvite();
+      }
+      function renderStage() {
+        const s = state,
+          m = currentMatch(s),
+          q = s.phase === "qualify",
+          done = s.phase === "finished";
+        $("stage").classList.toggle("qualification", q);
+        if (done) {
+          const final = s.matches.find((x) => x.kind === "main" && x.r === Math.log2(s.size) - 1),
+            bronze = s.matches.find((x) => x.kind === "bronze");
+          $("stage").innerHTML =
+            `<div class="podium"><div class="eyebrow">ТУРНИР ЗАВЕРШЁН</div><span class="pill">Чемпион</span><h1>${esc(name(s, final?.winner))}</h1><p class="muted">2 место · ${esc(name(s, final?.loser))}</p><p class="muted spacer">3 место · ${bronze?.winner ? esc(name(s, bronze.winner)) : "не разыгрывалось"}</p></div>`;
+          return;
+        }
+        const a = q ? s.players[s.qIndex]?.id : m?.slots[0],
+          b = m?.slots[1],
+          count = s.judges.filter((j) => j.voted && !j.blocked).length,
+          total = s.expected.length;
+        let outcome = "";
+        if (s.revealed && !q) {
+          const t = s.results;
+          const w =
+            s.technical ||
+            (t.a === t.b || (s.rules.mode === "winner" && t.tie >= Math.max(t.a, t.b))
+              ? null
+              : t.a > t.b
+                ? "a"
+                : "b");
+          outcome = w
+            ? `Победитель ${w.toUpperCase()}${s.technical ? " · техническая победа" : ""}`
+            : "Ничья · нужен Extra Round";
+        }
+        const card = (id, side) =>
+          `<div class="candidate ${side}"><small>${q ? "УЧАСТНИК" : `СТОРОНА ${side.toUpperCase()}`} · ПОСЕВ ${player(s, id)?.seed || "—"}</small><h2>${esc(name(s, id))}</h2><div class="score">${s.revealed ? (s.technical ? (s.technical === side ? "W" : "—") : (s.results?.[side] ?? 0)) : "?"}</div><small>${s.revealed ? "Оценки раскрыты" : "Оценки скрыты до раскрытия"}</small></div>`;
+        $("stage").innerHTML =
+          `<div class="stage-head"><div><div class="eyebrow">${q ? "ОТБОР" : "LIVE BATTLE"}</div><h3>${esc(currentRound(s))}</h3></div><span class="pill">${q ? "3 критерия · 1–10" : s.rules.mode === "winner" ? "Выбор победителя" : `${s.rules.mode === "criteria" ? s.rules.criteria.length + " критерия · " : ""}1–${s.rules.max}`}</span></div><div class="arena">${card(a, "a")}${q ? "" : `<div class="vs">VS</div>${card(b, "b")}`}</div><div class="progress"><div style="width:${total ? Math.min(100, (count / total) * 100) : 0}%"></div></div><div class="row spacer" style="justify-content:space-between"><small>${count} / ${total} голосов принято</small><strong style="color:var(--accent)">${esc(outcome || "Ожидание решения судей")}</strong></div><div class="judge-pills">${
+            s.judges
+              .filter((j) => !j.blocked)
+              .map(
+                (j) =>
+                  `<span class="pill ${j.voted ? "voted" : ""}">${esc(j.name)} · ${j.voted ? "✓ принят" : live(j) ? "ожидаем" : "офлайн"}</span>`,
+              )
+              .join("") || "<small>Пригласите судей по ПИН или QR-коду.</small>"
+          }</div>${s.revealed ? `<details><summary>Раскладка оценок</summary>${s.breakdown.map((v) => `<div class="result-row"><span>${esc(v.judge)}</span><b>${v.choice ? esc(v.choice === "tie" ? "Extra Round" : v.choice.toUpperCase()) : `${sum(v.a)}${q ? "" : " : " + sum(v.b)}`}</b></div>`).join("")}</details>` : ""}`;
+      }
+      function renderControls() {
+        const done = state.phase === "finished",
+          q = state.phase === "qualify",
+          ready = renderConnectivity(),
+          blocked = !ready || done;
+        const all =
+          state.expected.length > 0 &&
+          state.expected.every((id) => state.judges.find((j) => j.id === id)?.voted);
+        let html =
+          btn("reveal", "Раскрыть оценки", "", blocked || state.revealed || !all, "wide") +
+          btn(
+            "next",
+            q ? "Записать и следующий →" : "Следующий баттл →",
+            "",
+            blocked || !state.revealed,
+            "primary wide",
+          ) +
+          btn("reset", "Переголосование", "", blocked, "wide");
+        if (!q && !done)
+          html +=
+            btn("technical", "Тех. победа A", 'data-side="a"', blocked, "danger") +
+            btn("technical", "Тех. победа B", 'data-side="b"', blocked) +
+            btn("replace", "Заменить A", 'data-side="a"', blocked, "mini") +
+            btn("replace", "Заменить B", 'data-side="b"', blocked, "mini");
+        if (q)
+          html += btn(
+            "finishQualify",
+            "Завершить отбор →",
+            "",
+            blocked || state.qualifiers.length < 2,
+            "wide",
+          );
+        $("controls").innerHTML = html;
+      }
+      function renderJudges() {
+        const active = state.judges.filter((j) => !j.blocked);
+        $("judge-count").textContent = active.filter(live).length + " онлайн";
+        $("judges").innerHTML =
+          state.judges
+            .map(
+              (j) =>
+                `<div class="judge-row"><div class="row"><strong>${esc(j.name)}</strong><small>${j.blocked ? "исключён" : live(j) ? "● онлайн" : "○ офлайн"}</small></div><small>${j.voted ? "Голос принят" : state.expected.includes(j.id) ? "Ожидаем голос" : "Со следующего раунда"}</small><div class="row" style="margin-top:8px">${j.blocked ? btn("unblock", "Разрешить вход", `data-id="${esc(j.id)}"`, false, "mini") : btn("resetJudge", "Сброс голоса", `data-id="${esc(j.id)}"`, !j.voted || state.revealed, "mini") + btn("kick", "Исключить", `data-id="${esc(j.id)}"`, state.revealed, "mini danger")}</div></div>`,
+            )
+            .join("") ||
+          '<p class="hint">Пока нет судей. Их подключения появятся здесь автоматически.</p>';
+      }
+      function renderBracket() {
+        const s = state;
+        $("bracket-panel").hidden = s.phase === "qualify";
+        $("leaderboard-panel").hidden = !s.qualifiers.length;
+        if (s.qualifiers.length)
+          $("leaderboard").innerHTML = [...s.qualifiers]
+            .sort((a, b) => b.score - a.score || a.order - b.order)
+            .map(
+              (q, i) =>
+                `<div class="result-row"><span>${i + 1}. ${esc(name(s, q.id))}</span><strong>${q.score}</strong></div>`,
+            )
+            .join("");
+        if (!s.matches.length) return;
+        const node = (m) =>
+          `<div class="match ${s.current === m.id ? "active" : ""}">${m.slots.map((id) => `<button class="slot ${id && m.done && id === m.winner ? "won" : ""}" ${id ? 'data-action="rename" data-id="' + esc(id) + '"' : "disabled"}><small class="seed">${player(s, id)?.seed || "—"}</small><span>${id ? esc(name(s, id)) : m.done ? "Bye" : "Ожидание / Bye"}</span>${id && m.winner === id ? "✓" : ""}</button>`).join("")}${m.done ? `<div style="padding:4px 10px"><small>${m.reason === "bye" ? "Автопроход" : m.reason === "technical" ? "Техническая победа" : `${m.result?.a ?? 0} : ${m.result?.b ?? 0}`}</small></div>` : ""}</div>`;
+        $("bracket").innerHTML = Array.from({ length: Math.log2(s.size) }, (_, r) => {
+          const matches = s.matches.filter((m) => m.kind === "main" && m.r === r);
+          return `<div class="round"><h3>${esc(matches[0]?.label)}</h3><div class="round-matches">${matches.map(node).join("")}${r === Math.log2(s.size) - 1 ? "<h3>Бронза</h3>" + node(s.matches.find((m) => m.kind === "bronze")) : ""}</div></div>`;
+        }).join("");
+      }
+      function renderSettings() {
+        if (!state || role === "judge") return;
+        $("themes").innerHTML = Object.entries(THEMES)
+          .map(
+            ([key, [label, colors]]) =>
+              `<button class="theme ${style.theme === key ? "active" : ""}" data-action="theme" data-theme="${key}" aria-pressed="${style.theme === key}"><div class="swatch" style="background:linear-gradient(90deg,${colors})"></div>${label}</button>`,
+          )
+          .join("");
+        if (document.activeElement !== $("opacity")) $("opacity").value = style.opacity;
+        if (document.activeElement !== $("blur")) $("blur").value = style.blur;
+        $("opacity-out").textContent = $("opacity").value + "%";
+        $("blur-out").textContent = $("blur").value + " px";
+        const key = JSON.stringify(state.rules);
+        if (key !== settingsKey) {
+          settingsKey = key;
+          $("scoring-mode").value = state.rules.mode;
+          $("score-range").value = state.rules.max;
+          $("criteria-input").value = state.rules.criteria.join(", ");
+          $("auto-reveal").checked = state.rules.autoReveal;
+          $("judge-reveal").checked = state.rules.judgeReveal;
+        }
+      }
+      function renderInvite() {
+        let base = $("public-url").value.trim() || location.href;
+        let url;
+        try {
+          url = new URL(base);
+          if (!/^https?:$/.test(url.protocol)) throw Error();
+          url.search = "";
+          url.hash = "";
+          url.searchParams.set("room", room);
+          if (brokerConfig.url !== "wss://broker.emqx.io:8084/mqtt")
+            url.searchParams.set("broker", brokerConfig.url);
+        } catch {
+          $("qr").hidden = true;
+          $("qr-note").textContent =
+            "Для QR укажите публичный HTTPS-адрес файла на стартовом экране.";
+          $("copy-link").disabled = true;
+          return;
+        }
+        const link = url.href;
+        if (link === inviteURL) return;
+        inviteURL = link;
+        $("qr").hidden = false;
+        $("copy-link").disabled = false;
+        $("qr").replaceChildren();
+        if (window.QRCode) {
+          new QRCode($("qr"), {
+            text: link,
+            width: 128,
+            height: 128,
+            correctLevel: QRCode.CorrectLevel.M,
+          });
+          $("qr-note").textContent = "Сканируйте камерой · введите имя судьи";
+        } else {
+          $("qr").hidden = true;
+          $("qr-note").textContent = "QR-библиотека недоступна. Скопируйте ссылку.";
+        }
+      }
+      function renderJudge() {
+        const s = state,
+          j = s.judges.find((x) => x.id === auth.id),
+          m = currentMatch(s),
+          q = s.phase === "qualify";
+        $("judge-heading").innerHTML =
+          `<div class="eyebrow">СУДЬЯ / ${esc(j?.name || credentials.name)} · ${room}</div><h2>${esc(currentRound(s))}</h2><p class="muted spacer">${s.phase === "finished" ? "Спасибо за судейство" : q ? esc(name(s, s.players[s.qIndex]?.id)) : `${esc(name(s, m?.slots[0]))} <span class="muted">vs</span> ${esc(name(s, m?.slots[1]))}`}</p>`;
+        const key = [
+          s.roundId,
+          j?.voteVersion,
+          j?.voted,
+          s.revealed,
+          s.phase,
+          s.expected.includes(auth.id),
+          JSON.stringify(s.rules),
+          m ? m.slots.map((id) => name(s, id)).join("|") : "",
+        ].join(":");
+        if (key === judgeFormKey) return;
+        judgeFormKey = key;
+        if (s.phase === "finished") {
+          $("judge-content").innerHTML =
+            '<div class="panel spacer"><h2>Турнир завершён</h2><p class="hint">Итоговые места — на главном экране.</p></div>';
+          return;
+        }
+        if (j?.voted || s.revealed) {
+          $("judge-content").innerHTML =
+            `<div class="vote-message">${j?.voted ? "✓ Ваш голос принят хостом." : "Приём голосов закрыт."}</div><p class="muted">${s.revealed ? "Результат раскрыт. Ожидайте следующий раунд." : "Оценки скрыты. Ожидайте остальных судей."}</p>${!s.revealed && s.rules.judgeReveal ? btn("reveal", "Раскрыть все оценки", "", !s.expected.every((id) => s.judges.find((x) => x.id === id)?.voted), "full") : ""}`;
+          return;
+        }
+        if (!s.expected.includes(auth.id)) {
+          $("judge-content").innerHTML =
+            '<div class="panel spacer">Вы сможете голосовать со следующего раунда.</div>';
+          return;
+        }
+        const r = effectiveRules(s),
+          n = r.mode === "points" ? 1 : r.criteria.length;
+        if (judgeDraft?.roundId !== s.roundId || judgeDraft?.voteVersion !== (j.voteVersion || 0))
+          judgeDraft = {
+            roundId: s.roundId,
+            voteVersion: j.voteVersion || 0,
+            choice: null,
+            a: Array(n).fill(1),
+            b: q ? [] : Array(n).fill(1),
+          };
+        if (r.mode === "winner") {
+          $("judge-content").innerHTML =
+            `<div class="judge-form">${["a", "b"].map((side, i) => `<button class="btn winner-pick ${side} ${judgeDraft.choice === side ? "active" : ""}" data-action="voteChoice" data-side="${side}">Победил ${esc(name(s, m.slots[i]))}</button>`).join("")}</div>${btn("voteChoice", "Ничья / Extra Round", 'data-side="tie"', false, "full " + (judgeDraft.choice === "tie" ? "primary" : ""))}<p class="hint">Нажатие отправляет голос сразу. Изменить принятый голос может администратор.</p>`;
+          return;
+        }
+        $("judge-content").innerHTML =
+          `<form id="vote-form"><div class="judge-form" ${q ? 'style="grid-template-columns:1fr"' : ""}>${(q ? ["a"] : ["a", "b"]).map((side, i) => `<section class="panel"><div class="eyebrow">${q ? "КВАЛИФИКАЦИЯ" : "СТОРОНА " + side.toUpperCase()}</div><h3>${esc(q ? name(s, s.players[s.qIndex]?.id) : name(s, m.slots[i]))}</h3>${(r.mode === "points" ? ["Общая оценка"] : r.criteria).map((criterion, index) => `<div class="criteria"><div class="row"><label for="score-${side}-${index}">${esc(criterion)}</label><input aria-label="${esc(criterion)}: точное значение ${side.toUpperCase()}" class="numeric" type="number" min="1" max="${r.max}" step="1" value="${judgeDraft[side][index]}" data-score="${side}" data-index="${index}"></div><input id="score-${side}-${index}" type="range" min="1" max="${r.max}" step="1" value="${judgeDraft[side][index]}" data-score="${side}" data-index="${index}"><small>1 — ${r.max} баллов</small></div>`).join("")}<p class="spacer">Сумма: <strong id="total-${side}">${sum(judgeDraft[side])}</strong></p></section>`).join("")}</div><button id="submit-vote" class="btn primary full" type="submit">Отправить оценки</button><p class="hint">Голос считается принятым только после подтверждения хоста.</p></form>`;
+      }
+      /* События UI: делегирование сохраняет обработчики при обновлении динамических карточек. */
+      async function guarded(task) {
+        try {
+          return await task();
+        } catch (e) {
+          toast(e.message || "Не удалось выполнить действие.", true);
+        }
+      }
+      for (const [id, fn] of [
+        ["host-form", () => startHost()],
+        ["judge-login", () => startRemote("judge")],
+        ["admin-login", () => startRemote("admin")],
+      ])
+        $(id).addEventListener("submit", (e) => {
+          e.preventDefault();
+          const button = e.submitter;
+          button.disabled = true;
+          guarded(fn).finally(() => (button.disabled = false));
+        });
+      $("resume").onclick = () => guarded(() => startHost(true));
+      $("exit").onclick = () =>
+        guarded(async () => {
+          if (
+            role === "host" &&
+            !(await modal(
+              "Закрыть главный экран?",
+              "Состояние сохранится. Пока хост отключён, судейство и пульт администратора приостановлены.",
+            ))
+          )
+            return;
+          stopClient();
+          showLanding();
+        });
+      let commandBusy = false;
+      document.addEventListener("click", (e) => {
+        const button = e.target.closest("[data-action]");
+        if (!button || button.disabled) return;
+        guarded(async () => {
+          if (commandBusy) return;
+          const action = button.dataset.action,
+            expectedRound = state?.roundId;
+          commandBusy = true;
+          try {
+            if (action === "voteChoice") {
+              await sendVote({ choice: button.dataset.side });
+              return;
+            }
+            if (action === "theme") {
+              await command("appearance", { theme: button.dataset.theme });
+              return;
+            }
+            if (action === "rename") {
+              const n = await modal(
+                "Переименовать участника",
+                "Новое имя обновится во всей сетке и на судейских пультах.",
+                name(state, button.dataset.id),
+              );
+              if (n !== null) await command("rename", { id: button.dataset.id, name: n });
+              return;
+            }
+            if (action === "replace") {
+              const n = await modal(
+                "Замена участника " + button.dataset.side.toUpperCase(),
+                "Текущие голоса будут сброшены. История предыдущих баттлов сохранится.",
+                "",
+              );
+              if (n !== null)
+                await command("replace", { side: button.dataset.side, name: n }, expectedRound);
+              return;
+            }
+            const confirmations = {
+              reset: ["Переголосование", "Все голоса текущего раунда будут сброшены."],
+              technical: [
+                "Техническая победа " + (button.dataset.side || "").toUpperCase(),
+                "Результат будет раскрыт без ожидания судей. Переход дальше — отдельной кнопкой.",
+              ],
+              kick: [
+                "Исключить судью",
+                "Его голос текущего раунда будет удалён. Вход останется заблокирован до разрешения администратора.",
+              ],
+              resetJudge: ["Сбросить голос судьи", "Судья сможет отправить оценку заново."],
+              finishQualify: [
+                "Завершить квалификацию",
+                "Сетка будет построена только из уже записанных результатов. Незавершённая оценка не учитывается.",
+              ],
+            };
+            if (confirmations[action] && !(await modal(...confirmations[action]))) return;
+            await command(
+              action,
+              { id: button.dataset.id, side: button.dataset.side },
+              expectedRound,
+            );
+            if (!["next", "reveal"].includes(action)) toast("Изменения применены");
+          } finally {
+            commandBusy = false;
+          }
+        });
+      });
+      let sendingVote = false;
+      async function sendVote(vote) {
+        if (sendingVote) return;
+        check(auth?.role === "judge", "Подключитесь как судья.");
+        sendingVote = true;
+        $("judge-content").classList.add("busy");
+        try {
+          await request("vote", {
+            vote,
+            voteVersion: state.judges.find((j) => j.id === auth.id)?.voteVersion || 0,
+          });
+          toast("Голос принят хостом");
+        } finally {
+          sendingVote = false;
+          $("judge-content").classList.remove("busy");
+        }
+      }
+      document.addEventListener("submit", (e) => {
+        if (e.target.id !== "vote-form") return;
+        e.preventDefault();
+        guarded(() => sendVote({ a: judgeDraft.a, b: judgeDraft.b }));
+      });
+      document.addEventListener("input", (e) => {
+        const el = e.target;
+        if (!el.dataset.score) return;
+        const side = el.dataset.score,
+          index = Number(el.dataset.index),
+          value = Number(el.value),
+          max = effectiveRules(state).max;
+        if (!Number.isInteger(value) || value < 1 || value > max) {
+          el.setCustomValidity("Введите целое число от 1 до " + max);
+          return;
+        }
+        el.setCustomValidity("");
+        judgeDraft[side][index] = value;
+        document
+          .querySelectorAll(`[data-score="${side}"][data-index="${index}"]`)
+          .forEach((peer) => {
+            if (peer !== el) peer.value = value;
+          });
+        $("total-" + side).textContent = sum(judgeDraft[side]);
+      });
+      $("scoring-form").onsubmit = (e) => {
+        e.preventDefault();
+        guarded(async () => {
+          const expectedRound = state?.roundId,
+            args = {
+              mode: $("scoring-mode").value,
+              max: Number($("score-range").value),
+              criteria: $("criteria-input")
+                .value.split(",")
+                .map((x) => x.trim())
+                .filter(Boolean),
+              autoReveal: $("auto-reveal").checked,
+              judgeReveal: $("judge-reveal").checked,
+            };
+          if (
+            state.phase === "battle" &&
+            !(await modal(
+              "Изменить правила?",
+              "Голоса текущего баттла будут сброшены. Судьи получат новую форму.",
+            ))
+          )
+            return;
+          await command("rules", args, expectedRound);
+          toast("Правила применены");
+        });
+      };
+      $("background-file").onchange = (e) =>
+        guarded(async () => {
+          const file = e.target.files[0];
+          if (!file) return;
+          $("image-info").textContent = "Сжимаем изображение…";
+          try {
+            const compressed = await compressImage(file);
+            await command("appearance", { background: compressed.data });
+            $("image-info").textContent =
+              `Готово: ${compressed.w} × ${compressed.h} · ${compressed.kb} КБ base64`;
+            toast("Фон обновлён на экране турнира");
+          } finally {
+            e.target.value = "";
+          }
+        });
+      $("set-url").onclick = () =>
+        guarded(async () => {
+          const url = $("background-url").value.trim();
+          check(
+            validBackground(url) && url.startsWith("https://"),
+            "Укажите прямую HTTPS-ссылку на изображение.",
+          );
+          const img = new Image();
+          img.referrerPolicy = "no-referrer";
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(
+              () => reject(Error("Изображение не отвечает. Проверьте прямую ссылку.")),
+              10000,
+            );
+            img.onload = () => {
+              clearTimeout(timeout);
+              resolve();
+            };
+            img.onerror = () => {
+              clearTimeout(timeout);
+              reject(Error("Не удалось загрузить изображение по ссылке."));
+            };
+            img.src = url;
+          });
+          await command("appearance", { background: url });
+          toast("Фон по ссылке применён");
+        });
+      $("remove-background").onclick = () =>
+        guarded(() => command("appearance", { background: "" }));
+      for (const id of ["opacity", "blur"]) {
+        $(id).oninput = () => {
+          $(id + "-out").textContent = $(id).value + (id === "opacity" ? "%" : " px");
+          document.documentElement.style.setProperty(
+            id === "opacity" ? "--overlay" : "--blur",
+            id === "opacity" ? Number($(id).value) / 100 : $(id).value + "px",
+          );
+        };
+        $(id).onchange = () =>
+          guarded(() => command("appearance", { [id]: Number($(id).value) })).finally(applyStyle);
+      }
+      $("copy-link").onclick = () =>
+        guarded(async () => {
+          check(inviteURL, "Ссылка пока недоступна.");
+          try {
+            await navigator.clipboard.writeText(inviteURL);
+            toast("Ссылка скопирована");
+          } catch {
+            await modal("Ссылка для судей", "Скопируйте адрес из поля ниже.", inviteURL);
+          }
+        });
+      $("projector").onclick = () => {
+        const on = document.body.classList.toggle("projector");
+        $("projector").textContent = on ? "Выйти из проектора" : "Режим проектора";
+        if (on) document.documentElement.requestFullscreen?.().catch(() => {});
+        else if (document.fullscreenElement) document.exitFullscreen?.();
+        toast("Режим проектора: нажмите Esc для возврата");
+      };
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          document.body.classList.remove("projector");
+          $("projector").textContent = "Режим проектора";
+        }
+      });
+      document.addEventListener("fullscreenchange", () => {
+        if (!document.fullscreenElement) {
+          document.body.classList.remove("projector");
+          $("projector").textContent = "Режим проектора";
+        }
+      });
+      $("export").onclick = () => {
+        const safe = {
+          title: state.title,
+          room,
+          exportedAt: new Date().toISOString(),
+          players: state.players,
+          qualifiers: state.qualifiers,
+          matches: state.matches,
+          rules: state.rules,
+        };
+        const url = URL.createObjectURL(
+            new Blob([JSON.stringify(safe, null, 2)], { type: "application/json" }),
+          ),
+          a = document.createElement("a");
+        a.href = url;
+        a.download = `arena-${room}-results.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      };
+      window.addEventListener("pagehide", () => {
+        if (role === "host") persist();
+        if (client) client.end(true);
+      });
+      window.addEventListener("online", () => {
+        if (client && !client.connected) client.reconnect();
+      });
+      const params = new URLSearchParams(location.search);
+      if (/^\d{6}$/.test(params.get("room") || "")) {
+        $("judge-pin").value = $("admin-pin").value = params.get("room");
+      }
+      if (/^wss:\/\//.test(params.get("broker") || ""))
+        $("broker-input").value = params.get("broker");
+      $("resume").hidden = !read(KEY);
+      applyStyle();
+    </script>
+  </body>
+</html>
